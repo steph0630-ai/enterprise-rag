@@ -23,13 +23,23 @@ DATABASES_DIR = PROJECT_ROOT / "data" / "databases"
 
 # 支持的文件类型
 ALLOWED_DOC_SUFFIXES = {
+    # 文本类
     ".md", ".txt", ".markdown",
     ".py", ".js", ".ts", ".html", ".htm",
     ".json", ".yaml", ".yml",
     ".java", ".go", ".rs", ".sql",
     ".cfg", ".ini", ".conf", ".toml", ".xml",
     ".csv", ".log",
+    # PDF
+    ".pdf",
+    # Office
+    ".docx", ".xlsx", ".xls",
+    # 图片（OCR 提取文字）
+    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tiff", ".tif",
 }
+
+# 二进制文件类型（不需要 UTF-8 编码校验）
+BINARY_SUFFIXES = {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tiff", ".tif", ".docx", ".xlsx", ".xls"}
 
 MAX_DOC_SIZE = 20 * 1024 * 1024   # 20MB
 MAX_DB_SIZE = 200 * 1024 * 1024   # 200MB
@@ -94,15 +104,6 @@ async def upload_document(file: UploadFile = File(...)):
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     safe_name = _safe_filename(file.filename)
     dest_path = UPLOADS_DIR / safe_name
-
-    # 尝试 UTF-8 解码以验证文本文件
-    try:
-        content.decode("utf-8")
-    except UnicodeDecodeError:
-        try:
-            content.decode("latin-1")
-        except Exception:
-            raise HTTPException(status_code=400, detail="无法识别的文件编码，请上传 UTF-8 文本文件")
 
     dest_path.write_bytes(content)
     logger.info("File saved: %s (%d bytes)", safe_name, len(content))

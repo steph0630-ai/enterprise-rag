@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     embedding_base_url: str = "https://api.siliconflow.cn/v1"
     embedding_model: str = "BAAI/bge-m3"
 
+    # ---- Vision (Multimodal LLM for image→text) ----
+    vision_api_key: str = ""
+    vision_base_url: str = "https://api.deepseek.com"
+    vision_model: str = "deepseek-chat"
+
     # ---- Qdrant ----
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection_name: str = "enterprise_knowledge"

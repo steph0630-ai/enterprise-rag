@@ -56,9 +56,11 @@ with st.sidebar:
             "选择文档文件",
             type=["md", "txt", "markdown", "py", "js", "ts", "html", "htm",
                   "json", "yaml", "yml", "java", "go", "rs", "sql",
-                  "cfg", "ini", "conf", "toml", "xml", "csv", "log"],
+                  "cfg", "ini", "conf", "toml", "xml", "csv", "log",
+                  "pdf", "docx", "xlsx", "xls",
+                  "png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff", "tif"],
             key="doc_uploader",
-            help="支持 Markdown、代码、配置文件、CSV 等文本格式，最大 20MB",
+            help="支持 PDF/Word/Excel/Markdown/代码/图片等格式，最大 20MB。PDF 逐页分类处理，图片自动 OCR 提取文字。",
         )
 
         if uploaded_file is not None:
@@ -114,113 +116,51 @@ with st.sidebar:
 
     # ===== 📊 知识库管理 =====
     with st.expander("📊 知识库管理", expanded=False):
-        tab_docs, tab_dbs = st.tabs(["📄 文档", "🗄️ 数据库"])
-
         # -- 文档列表 --
-        with tab_docs:
-            if st.button("🔄 刷新文档列表", use_container_width=True, key="btn_refresh_docs"):
-                pass
+        st.caption("**📄 已上传文档**")
+        if st.button("🔄 刷新", key="refresh_docs"):
+            st.rerun()
 
-            try:
-                resp = requests.get(f"{API_BASE}/api/upload/documents", timeout=10)
-                if resp.status_code == 200:
-                    docs = resp.json()
-                    if docs:
-                        st.caption(f"共 {len(docs)} 个文档")
-                        for doc in docs:
-                            col1, col2 = st.columns([4, 1])
-                            with col1:
-                                st.caption(f"📄 {doc['filename']} ({doc['chunks']} chunks)")
-                            with col2:
-                                if st.button("🗑", key=f"del_doc_{doc['doc_id']}", help=f"删除 {doc['filename']}"):
-                                    try:
-                                        del_resp = requests.delete(
-                                            f"{API_BASE}/api/upload/document",
-                                            params={"filename": doc["filename"]},
-                                            timeout=10,
-                                        )
-                                        if del_resp.status_code == 200:
-                                            st.success(f"已删除 {doc['filename']}")
-                                            st.rerun()
-                                        else:
-                                            st.error("删除失败")
-                                    except Exception as e:
-                                        st.error(f"删除失败: {e}")
-                    else:
-                        st.caption("暂无上传的文档")
+        try:
+            resp = requests.get(f"{API_BASE}/api/upload/documents", timeout=10)
+            if resp.status_code == 200:
+                docs = resp.json()
+                if docs:
+                    for i, doc in enumerate(docs):
+                        c1, c2 = st.columns([5, 1])
+                        c1.caption(f"📄 {doc['filename']} ({doc['chunks']} chunks)")
+                        if c2.button("🗑", key=f"del_{i}_{doc['filename'][:10]}"):
+                            requests.delete(f"{API_BASE}/api/upload/document", params={"filename": doc["filename"]}, timeout=10)
+                            st.rerun()
                 else:
-                    st.caption("无法获取文档列表")
-            except Exception:
-                st.caption("⚠️ 无法连接后端")
+                    st.caption("_(暂无)_")
+        except Exception:
+            st.caption("⚠️ 后端未连接")
+
+        st.divider()
 
         # -- 数据库列表 --
-        with tab_dbs:
-            if st.button("🔄 刷新数据库列表", use_container_width=True, key="btn_refresh_dbs"):
-                pass
+        st.caption("**🗄️ 已上传数据库**")
+        if st.button("🔄 刷新", key="refresh_dbs"):
+            st.rerun()
 
-            try:
-                resp = requests.get(f"{API_BASE}/api/upload/databases", timeout=10)
-                if resp.status_code == 200:
-                    dbs = resp.json()
-                    if dbs:
-                        st.caption(f"共 {len(dbs)} 个数据库")
-                        for db in dbs:
-                            is_active = db.get("is_active", False)
-                            prefix = "🟢" if is_active else "⚫"
-                            st.caption(
-                                f"{prefix} **{db['filename']}** "
-                                f"({db['size_bytes'] / 1024:.0f}KB, "
-                                f"{len(db['tables'])} 张表)"
-                            )
-                            if db["tables"]:
-                                st.caption(f"  表: {', '.join(db['tables'][:5])}"
-                                           f"{'...' if len(db['tables']) > 5 else ''}")
-
-                            col1, col2, col3 = st.columns([1, 1, 1])
-                            with col1:
-                                if not is_active:
-                                    if st.button("🔁 切换", key=f"switch_db_{db['filename']}",
-                                                 help=f"切换到 {db['filename']}"):
-                                        try:
-                                            sw_resp = requests.post(
-                                                f"{API_BASE}/api/upload/database/switch",
-                                                json={"filename": db["filename"]},
-                                                timeout=10,
-                                            )
-                                            if sw_resp.status_code == 200:
-                                                st.session_state.active_db = db["filename"]
-                                                st.success(f"已切换到 {db['filename']}")
-                                                st.rerun()
-                                            else:
-                                                st.error("切换失败")
-                                        except Exception as e:
-                                            st.error(f"切换失败: {e}")
-                            with col2:
-                                pass
-                            with col3:
-                                if st.button("🗑", key=f"del_db_{db['filename']}",
-                                             help=f"删除 {db['filename']}"):
-                                    try:
-                                        del_resp = requests.delete(
-                                            f"{API_BASE}/api/upload/database",
-                                            params={"filename": db["filename"]},
-                                            timeout=10,
-                                        )
-                                        if del_resp.status_code == 200:
-                                            if st.session_state.active_db == db["filename"]:
-                                                st.session_state.active_db = None
-                                            st.success(f"已删除 {db['filename']}")
-                                            st.rerun()
-                                        else:
-                                            st.error("删除失败")
-                                    except Exception as e:
-                                        st.error(f"删除失败: {e}")
-                    else:
-                        st.caption("暂无上传的数据库")
+        try:
+            resp = requests.get(f"{API_BASE}/api/upload/databases", timeout=10)
+            if resp.status_code == 200:
+                dbs = resp.json()
+                if dbs:
+                    for i, db in enumerate(dbs):
+                        active = db.get("is_active", False)
+                        marker = "🟢" if active else "⚫"
+                        st.caption(f"{marker} {db['filename']} ({db['size_bytes']/1024:.0f}KB, {len(db['tables'])}表)")
+                        if not active:
+                            if st.button("🔁 切换到此库", key=f"switch_{i}"):
+                                requests.post(f"{API_BASE}/api/upload/database/switch", json={"filename": db["filename"]}, timeout=10)
+                                st.rerun()
                 else:
-                    st.caption("无法获取数据库列表")
-            except Exception:
-                st.caption("⚠️ 无法连接后端")
+                    st.caption("_(暂无)_")
+        except Exception:
+            st.caption("⚠️ 后端未连接")
 
     st.divider()
 

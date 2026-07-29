@@ -46,6 +46,9 @@ class IngestionPipeline:
         """
         result = IngestionResult()
 
+        # 重置 chunk 去重缓存（每个批次独立去重）
+        self.chunker.reset_dedup()
+
         metas = connector.list_documents(since=since)
         result.total_documents = len(metas)
         logger.info("Starting ingestion: %s documents from %s", len(metas), connector.source_type)
@@ -130,6 +133,8 @@ class IngestionPipeline:
         import hashlib
         from pathlib import Path
 
+        self.chunker.reset_dedup()
+
         result = IngestionResult(total_documents=1)
         path = Path(file_path)
 
@@ -139,14 +144,22 @@ class IngestionPipeline:
             return result
 
         try:
-            # 1. 读取文件内容
-            with open(path, "r", encoding="utf-8") as f:
-                raw = f.read()
-        except UnicodeDecodeError:
-            with open(path, "r", encoding="latin-1") as f:
-                raw = f.read()
+            # 1. 读取文件内容（二进制文件直接算 hash）
+            suffix = path.suffix.lower()
+            binary_suffixes = {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tiff", ".tif", ".docx", ".xlsx", ".xls"}
 
-            checksum = hashlib.md5(raw.encode()).hexdigest()
+            if suffix in binary_suffixes:
+                with open(path, "rb") as f:
+                    raw_bytes = f.read()
+                checksum = hashlib.md5(raw_bytes).hexdigest()
+            else:
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        raw = f.read()
+                except UnicodeDecodeError:
+                    with open(path, "r", encoding="latin-1") as f:
+                        raw = f.read()
+                checksum = hashlib.md5(raw.encode()).hexdigest()
             doc_id = doc_id or path.name
 
             # 2. 解析
