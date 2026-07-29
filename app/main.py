@@ -5,7 +5,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import chat, ingest
+from app.api import chat, ingest, upload
 
 # 日志配置
 log_level = os.getenv("LOG_LEVEL", "INFO")
@@ -34,6 +34,7 @@ app.add_middleware(
 # 注册路由
 app.include_router(chat.router)
 app.include_router(ingest.router)
+app.include_router(upload.router)
 
 
 @app.get("/")

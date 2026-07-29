@@ -12,6 +12,7 @@ from app.generation.generator import Generator
 from app.chat.session import session_store
 from app.chat.query_rewriter import QueryRewriter
 from app.nl2sql.pipeline import NL2SQLPipeline
+from app.nl2sql.db_manager import get_db_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -20,28 +21,46 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 generator = Generator(enable_rerank=False)  # 关闭 Reranker 提速，混合检索+RRF 已够准
 rewriter = QueryRewriter()
 
-# NL2SQL pipeline（懒加载）
+# NL2SQL pipeline（懒加载 + 支持动态切换数据库）
 _nl2sql: NL2SQLPipeline | None = None
+_nl2sql_db_path: str | None = None  # 记录当前 pipeline 使用的 db 路径
+
+
+def reset_nl2sql():
+    """重置 NL2SQL pipeline（数据库切换后调用）"""
+    global _nl2sql, _nl2sql_db_path
+    _nl2sql = None
+    _nl2sql_db_path = None
+    logger.info("NL2SQL pipeline reset for database switch")
 
 
 def _get_nl2sql() -> NL2SQLPipeline | None:
-    """懒加载 NL2SQL pipeline"""
-    global _nl2sql
-    if _nl2sql is not None:
+    """懒加载 NL2SQL pipeline，自动使用用户选择的数据库"""
+    global _nl2sql, _nl2sql_db_path
+
+    # 获取当前活跃数据库路径
+    db_manager = get_db_manager()
+    db_path = db_manager.active_db_path
+
+    # 如果路径没变且已初始化，直接返回
+    if _nl2sql is not None and _nl2sql_db_path == db_path:
         return _nl2sql
 
-    settings = get_settings()
-    db_path = settings.sqlite_db_path
+    # 回退到配置文件中的路径
     if not db_path:
-        # 默认路径：项目根目录下的 data/business.db
-        db_path = str(PROJECT_ROOT / "data" / "business.db")
+        settings = get_settings()
+        db_path = settings.sqlite_db_path
+        if not db_path:
+            db_path = str(PROJECT_ROOT / "data" / "business.db")
 
     if Path(db_path).exists():
         _nl2sql = NL2SQLPipeline(db_path)
+        _nl2sql_db_path = db_path
         logger.info("NL2SQL pipeline initialized: %s", db_path)
     else:
         logger.warning("NL2SQL database not found at %s, NL2SQL disabled", db_path)
         _nl2sql = None
+        _nl2sql_db_path = None
 
     return _nl2sql
 

@@ -124,3 +124,84 @@ class IngestionPipeline:
             result.new_documents, result.skipped_documents, result.failed_documents, result.total_chunks,
         )
         return result
+
+    def run_file(self, file_path: str, doc_id: str | None = None) -> IngestionResult:
+        """处理单个上传文件：解析 → 分块 → 向量化 → 写入 Qdrant + BM25"""
+        import hashlib
+        from pathlib import Path
+
+        result = IngestionResult(total_documents=1)
+        path = Path(file_path)
+
+        if not path.exists():
+            result.failed_documents = 1
+            result.errors.append(f"文件不存在: {file_path}")
+            return result
+
+        try:
+            # 1. 读取文件内容
+            with open(path, "r", encoding="utf-8") as f:
+                raw = f.read()
+        except UnicodeDecodeError:
+            with open(path, "r", encoding="latin-1") as f:
+                raw = f.read()
+
+            checksum = hashlib.md5(raw.encode()).hexdigest()
+            doc_id = doc_id or path.name
+
+            # 2. 解析
+            text, file_meta = self.parser.parse(str(path))
+            merged_meta = {
+                **file_meta,
+                "doc_id": doc_id,
+                "title": path.stem,
+                "source_type": "upload",
+                "source_name": "用户上传",
+                "url": "",
+                "tags": ["upload"],
+                "checksum": checksum,
+            }
+
+            # 3. 分块
+            chunks: list[Chunk] = self.chunker.chunk_document(text, merged_meta)
+
+            payload = {
+                "title": merged_meta.get("title", ""),
+                "source_name": merged_meta.get("source_name", ""),
+                "source_type": merged_meta.get("source_type", ""),
+                "file_path": str(path.absolute()),
+                "url": "",
+                "tags": ["upload"],
+            }
+
+            # 4. BM25 索引
+            keyword_index = get_keyword_index()
+            keyword_index.remove_document(doc_id)
+            for chunk in chunks:
+                keyword_index.add_document(
+                    doc_id=doc_id,
+                    chunk_index=chunk.metadata.get("chunk_index", 0),
+                    content=chunk.content,
+                    payload=payload,
+                )
+
+            # 5. 向量化 + 写入 Qdrant
+            chunk_texts = [c.content for c in chunks]
+            embeddings = self.embedder.embed(chunk_texts)
+            self.vector_store.upsert_document(
+                doc_id=doc_id,
+                chunks=chunks,
+                embeddings=embeddings,
+                checksum=checksum,
+            )
+
+            result.new_documents = 1
+            result.total_chunks = len(chunks)
+            logger.info("Upload ingested: %s → %s chunks", doc_id, len(chunks))
+
+        except Exception as e:
+            result.failed_documents = 1
+            result.errors.append(f"{path.name}: {e}")
+            logger.error("Failed to ingest uploaded file %s: %s", path.name, e, exc_info=True)
+
+        return result

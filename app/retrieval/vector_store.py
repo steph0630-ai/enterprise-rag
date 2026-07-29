@@ -121,5 +121,17 @@ class VectorStore:
             for r in response.points
         ]
 
+    def delete_document(self, doc_id: str):
+        """从 Qdrant 中删除指定文档的所有 points"""
+        self.client.delete(
+            collection_name=self.collection,
+            points_selector=qmodels.FilterSelector(
+                filter=qmodels.Filter(
+                    must=[qmodels.FieldCondition(key="doc_id", match=qmodels.MatchValue(value=doc_id))]
+                )
+            ),
+        )
+        logger.info("Deleted all points for doc_id=%s", doc_id)
+
     def count(self) -> int:
         return self.client.count(self.collection).count
