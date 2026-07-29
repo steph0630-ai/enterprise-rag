@@ -42,5 +42,10 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Streamlit
-.streamlit/
+# Streamlit (cache only — config.toml is committed)
+.streamlit/*
+!.streamlit/config.toml
+
+# SQLite WAL temp files
+*.db-shm
+*.db-wal

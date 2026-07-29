@@ -1,0 +1,18 @@
+[theme]
+# === De-AI UI: Warm Editorial Palette ===
+# Burnt orange primary, warm white background, warm grays
+primaryColor = "#E85D2C"
+backgroundColor = "#FBF9F6"
+secondaryBackgroundColor = "#F3EFEA"
+textColor = "#1A1817"
+
+# System font stack — humanist sans-serif that doesn't scream "Inter"
+# Prefer native platform fonts for zero-latency rendering
+font = "sans-serif"
+
+[server]
+# Ensure file watcher doesn't interfere
+runOnSave = false
+
+[browser]
+gatherUsageStats = false
